@@ -41,8 +41,22 @@ PWM   A
 #include "../gpio/gpio.h"
 #include "motorboard.h"
 
+
+// #define MOTOR_DRY_RUN // define this to skip the send of pwm commands to the motors (testing)
+
+#define MOTOR_UART "/dev/ttyO0"
+#define GPIO_M1 78
+#define GPIO_M2 79
+#define GPIO_M3 80
+#define GPIO_M4 81
+
+#define GPIO_ERROR_READ 175
+#define GPIO_ERROR_RESET 176
+
+
 int mot_fd; /* File descriptor for the port */
 
+float motvals[4];
 
 int motorboard_cmd(u08 cmd, u08 *reply, int replylen) {
 	write(mot_fd,&cmd,1);
@@ -51,10 +65,10 @@ int motorboard_cmd(u08 cmd, u08 *reply, int replylen) {
 
 int motorboard_Init() {
 	//open mot port
-	mot_fd = open("/dev/ttyPA1", O_RDWR | O_NOCTTY | O_NDELAY);
+	mot_fd = open(MOTOR_UART, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (mot_fd == -1)
 	{
-		perror("open_port: Unable to open /dev/ttyPA1 - ");
+		perror("open_port: Unable to open "MOTOR_UART" - ");
 		return 201;
 	} 
 	fcntl(mot_fd, F_SETFL, 0); //read calls are non blocking
@@ -175,22 +189,22 @@ FF1 Delay 2 seconds after sending FFs
 	//Set the new options for the port
 	tcsetattr(mot_fd, TCSANOW, &options);
 	
-	//reset IRQ flipflop - on error 106 read 1, this code resets 106 to 0
-	gpio_set(106,-1);
-	gpio_set(107,0);
-	gpio_set(107,1);
+	//reset IRQ flipflop - on error GPIO_ERROR_READ read 1, this code resets GPIO_ERROR_READ to 0
+	gpio_set(GPIO_ERROR_READ,-1);
+	gpio_set(GPIO_ERROR_RESET,0);
+	gpio_set(GPIO_ERROR_RESET,1);
 
 	//all select lines inactive
-	gpio_set(68,1);
-	gpio_set(69,1);
-	gpio_set(70,1);
-	gpio_set(71,1);
+	gpio_set(GPIO_M1,1);
+	gpio_set(GPIO_M2,1);
+	gpio_set(GPIO_M3,1);
+	gpio_set(GPIO_M4,1);
 
 	//configure motors
 	int retval=0;
 	u08 reply[256];
 	for(int m=0;m<4;m++) {
-		gpio_set(68+m,-1);
+		gpio_set(GPIO_M1+m,-1);
 		motorboard_cmd(0xe0,reply,2);
 		if(reply[0]!=0xe0 || reply[1]!=0x00)
 		{
@@ -198,14 +212,14 @@ FF1 Delay 2 seconds after sending FFs
 			retval=1;
 		}
 		motorboard_cmd(m+1,reply,1);
-		gpio_set(68+m,1);
+		gpio_set(GPIO_M1+m,1);
 	}
 
 	//all select lines active
-	gpio_set(68,-1);
-	gpio_set(69,-1);
-	gpio_set(70,-1);
-	gpio_set(71,-1);
+	gpio_set(GPIO_M1,-1);
+	gpio_set(GPIO_M2,-1);
+	gpio_set(GPIO_M3,-1);
+	gpio_set(GPIO_M4,-1);
 
 	//start multicast
 	motorboard_cmd(0xa0,reply,1);
@@ -214,10 +228,10 @@ FF1 Delay 2 seconds after sending FFs
 	motorboard_cmd(0xa0,reply,1);
 	motorboard_cmd(0xa0,reply,1);
 
-	//reset IRQ flipflop - on error 106 read 1, this code resets 106 to 0
-	gpio_set(106,-1);
-	gpio_set(107,0);
-	gpio_set(107,1);
+	//reset IRQ flipflop - on error GPIO_ERROR_READ read 1, this code resets GPIO_ERROR_READ to 0
+	gpio_set(GPIO_ERROR_READ,-1);
+	gpio_set(GPIO_ERROR_RESET,0);
+	gpio_set(GPIO_ERROR_RESET,1);
 
 	//all leds green
 	motorboard_SetLeds(MOT_LEDGREEN, MOT_LEDGREEN, MOT_LEDGREEN, MOT_LEDGREEN);
@@ -229,6 +243,11 @@ FF1 Delay 2 seconds after sending FFs
 //cmd = 001aaaaa aaaabbbb bbbbbccc ccccccdd ddddddd0 
 void motorboard_SetPWM(u16 pwm0, u16 pwm1, u16 pwm2, u16 pwm3)
 {
+
+#ifdef MOTOR_DRY_RUN
+	printf("PWM: %3d %3d %3d %3d\n",pwm0,pwm1,pwm2,pwm3);
+	return;
+#else
 	u08 cmd[5];
 	cmd[0] = 0x20 | ((pwm0&0x1ff)>>4);
 	cmd[1] = ((pwm0&0x1ff)<<4) | ((pwm1&0x1ff)>>5);
@@ -236,6 +255,7 @@ void motorboard_SetPWM(u16 pwm0, u16 pwm1, u16 pwm2, u16 pwm3)
 	cmd[3] = ((pwm2&0x1ff)<<2) | ((pwm3&0x1ff)>>7);
 	cmd[4] = ((pwm3&0x1ff)<<1);
 	write(mot_fd, cmd, 5);
+#endif
 }
 
 //write led command
@@ -247,6 +267,42 @@ void motorboard_SetLeds(u08 led0, u08 led1, u08 led2, u08 led3)
 	cmd[1]=((led2&3)<<7)  | ((led3&3)<<5);
 	write(mot_fd, cmd, 2);
 }  
+
+//run motors: 0.0=minimum speed, 1.0=maximum speed (clipped to these values)
+void motorboard_Run(float m0, float m1, float m2, float m3)
+{
+  const u16 mot_pwm_min=0x00; 
+  const u16 mot_pwm_max=0x1ff;
+  motvals[0]=m0;
+  motvals[1]=m1;
+  motvals[2]=m2;
+  motvals[3]=m3;
+  
+  //convert to pwm values, clipped at mot_pwm_min and mot_pwm_max
+  float pwm[4];
+  for(int i=0;i<4;i++) {
+    if(motvals[i]<0.0) {
+      printf("mot value %d too low %f\n", i, motvals[i]);
+      motvals[i]=0.0;
+    }
+    if(motvals[i]>1.0) {
+      printf("mot value %d too high %f\n", i, motvals[i]);
+      motvals[i]=1.0;
+    }
+    pwm[i]=mot_pwm_min + motvals[i]*(mot_pwm_max-mot_pwm_min);
+    if(pwm[i]<mot_pwm_min) pwm[i]=mot_pwm_min;
+    if(pwm[i]>mot_pwm_max) pwm[i]=mot_pwm_max;
+  }
+    
+  motorboard_SetPWM((u16)pwm[0],(u16)pwm[1],(u16)pwm[2],(u16)pwm[3]);
+} 
+
+void motorboard_GetMot(float *m) {	
+  int i;
+  for(i=0;i<4;++i) {
+    m[i] = motvals[i];
+  }
+}
 
 void motorboard_Close()
 {

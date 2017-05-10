@@ -37,7 +37,7 @@
 int main()
 {
   printf("Motorboard Test Program ... Press q to quit\r\n");
-  printf("Motor: 1,2,3,4=run single motor at 50%  5=run all motors at 50% ,=throttle up 1%  .=throttle down 1%  space=stop\r\n");
+  printf("Motor: 1,2,3,4=run single motor at 50%%  5=run all motors at 50%% ,=throttle up 1%%  .=throttle down 1%%  space=stop\r\n");
   printf("Leds:  a=loff  s=green  d=orange  f=red\r\n");
 	
   mot_Init();
@@ -54,7 +54,7 @@ int main()
 	int c=tolower(util_getch());
 	if(c=='q') break;
 	if(c=='1') {
-		printf("\rRun Motor1 50%            ");
+		printf("\rRun Motor1 50%%            ");
 		throttle1 = .50;
 		throttle2 = 0;
 		throttle3 = 0;
@@ -62,7 +62,7 @@ int main()
 		mot_Run(throttle1,throttle2,throttle3,throttle4);
 	}
 	if(c=='2') {
-		printf("\rRun Motor2 50%            ");
+		printf("\rRun Motor2 50%%            ");
 		throttle1 = 0;
 		throttle2 = .50;
 		throttle3 = 0;
@@ -70,7 +70,7 @@ int main()
 		mot_Run(throttle1,throttle2,throttle3,throttle4);
 	}
 	if(c=='3') {
-		printf("\rRun Motor3 50%            ");
+		printf("\rRun Motor3 50%%            ");
 		throttle1 = 0;
 		throttle2 = 0;
 		throttle3 = .50;
@@ -78,7 +78,7 @@ int main()
 		mot_Run(throttle1,throttle2,throttle3,throttle4);
 	}
 	if(c=='4') {
-		printf("\rRun Motor4 50%            ");
+		printf("\rRun Motor4 50%%            ");
 		throttle1 = 0;
 		throttle2 = 0;
 		throttle3 = 0;
@@ -86,7 +86,7 @@ int main()
 		mot_Run(throttle1,throttle2,throttle3,throttle4);
 	}
 	if(c=='5') {
-		printf("\rRun All Motors 50%            ");
+		printf("\rRun All Motors 50%%            ");
 		throttle1 = .50;
 		throttle2 = .50;
 		throttle3 = .50;
@@ -109,6 +109,22 @@ int main()
 		if(throttle4>0) throttle4 += step;
 		mot_Run(throttle1,throttle2,throttle3,throttle4);
 	}
+	if(c==';') {
+		printf("\rThrottle down * 60            ");
+		if(throttle1>step*60) throttle1 -= step*60;
+		if(throttle2>step*60) throttle2 -= step*60;
+		if(throttle3>step*60) throttle3 -= step*60;
+		if(throttle4>step*60) throttle4 -= step*60;
+		mot_Run(throttle1,throttle2,throttle3,throttle4);
+	}
+	if(c==':') {
+		printf("\rThrottle up *60            ");
+		if(throttle1>0) throttle1 += step*60;
+		if(throttle2>0) throttle2 += step*60;
+		if(throttle3>0) throttle3 += step*60;
+		if(throttle4>0) throttle4 += step*60;
+		mot_Run(throttle1,throttle2,throttle3,throttle4);
+	}
 	if(c==' ') {
 		printf("\rStop            ");
 		mot_Stop();
@@ -129,6 +145,10 @@ int main()
 		printf("\rLeds red            ");
 		mot_SetLeds(MOT_LEDRED,MOT_LEDRED,MOT_LEDRED,MOT_LEDRED);
 	}
+	
+	if(c!=-1) {
+  	  printf("Throttle: %f %f %f %f\n",throttle1, throttle2, throttle3,throttle4);
+  	}
 	
 	//yield to other threads
 	pthread_yield();

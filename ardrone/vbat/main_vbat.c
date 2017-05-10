@@ -23,17 +23,15 @@
 #include "vbat.h"
 
 int main(int argc, char *argv[]) {
-	vbat_struct vbat;
+	struct vbat_struct vbat;
 
 	if(vbat_init(&vbat)) return 1;
-
-	printf("Setpoints:  Vdd0=%4.2fV Vdd1=%4.2fV Vdd2=%4.2fV Vdd3=%4.2fV Vdd4=%4.2fV\n",vbat.vdd0_setpoint,vbat.vdd1_setpoint,vbat.vdd2_setpoint,vbat.vdd3_setpoint,vbat.vdd4_setpoint);
-	printf("==================================================================\n");
-
+	
 	while(1) {
 		vbat_read(&vbat);
-		printf("Vbat=%5.2fV Vdd0=%4.2fV Vdd1=%4.2fV Vdd2=%4.2fV Vdd3=%4.2fV Vdd4=%4.2fV\n",vbat.vbat,vbat.vdd0,vbat.vdd1,vbat.vdd2,vbat.vdd3,vbat.vdd4);
-		usleep(100000);
+ 		printf("Vbat=%5.2fV\n",vbat.vbat);
+ 		if (argc <=1) break;
+		usleep(1000000);
 	}
 
 	return 0;

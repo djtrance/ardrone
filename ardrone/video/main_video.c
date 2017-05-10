@@ -22,90 +22,35 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include "video.h"
-
-void video_cg(img_struct* img) 
-{
-	int h=img->h;
-	int w=img->w;
-	int n=w*h;
-	
-	int p=0;
-	int px=0;
-	int py=0;
-	int x=0;
-	int y=0;
-	unsigned char* buf = img->buf;
-	for(int i=0;i<n;i++) {
-		p+=buf[i];
-		px+=x*buf[i];
-		py+=y*buf[i];
-		x++;
-		if(x==w) {
-			x=0;
-			y++;
-		}
-	}
-	float cg_x = (float)px/p;
-	float cg_y = (float)py/p;
-	printf("x=%10.6f y=%10.6f\n",cg_x,cg_y);
-}
-
-void video_blocksum(img_struct* img1, img_struct* img2, int* dx_out, int* dy_out) 
-{
-	int h=img1->h;
-	int w=img1->w;
-	int n=w*h;
-	unsigned char* buf1 = img1->buf;
-	unsigned char* buf2 = img2->buf;
-	
-	int dmax = 3;
-	int min_sum = 2000000000;
-	int min_dx = -99;
-	int min_dy = -99;
-	for(int dy=-dmax;dy<=dmax;dy++) {
-		for(int dx=-dmax;dx<=dmax;dx++) {
-			int sum=0;
-			for(int y=dmax;y<h-dmax;y++) {
-				int i1 = y*w + dmax;
-				int i2 = (y+dy)*w + dmax+dx;
-				for(int x=dmax;x<w-dmax;x++) {
-					//printf("x=%d y=%d i1=%d i2=%d\n",x,y,i1,i2);
-					sum += abs(buf1[i1] - buf2[i2]);
-					i1++;
-					i2++;
-				}
-			}
-			if(min_sum>sum) {
-				min_sum = sum;
-				min_dx = dx;
-				min_dy = dy;
-			}
-		}
-	}
-			
-	*dx_out=min_dx;
-	*dy_out=min_dy;
-}
+#include "blocksum.h"
 
 int main(int argc,char ** argv)
 {
-	vid_struct vid;
-	vid.device = (char*)"/dev/video1";
-	vid.w=176;
-	vid.h=144;
-	vid.n_buffers = 4;
-	video_Init(&vid);
+	struct vid_struct vid;
+	vid.device = (char*)"/dev/video2";
+	if(argc > 1) vid.device=argv[1];
+	
+	printf("Device is %s\n",vid.device);
+	vid.w=320;
+	vid.h=240;
+	vid.n_buffers = 0;
+	if(video_Init(&vid) !=0) exit(-1);
 
-	img_struct* img_old = video_CreateImage(&vid);
-	img_struct* img_new = video_CreateImage(&vid);
+	struct img_struct* img_old = video_CreateImage(&vid,1);
+	struct img_struct* img_new = video_CreateImage(&vid,1);
 	
 	int dx,dy;
 	int x=0,y=0;
 
-	video_GrabImage(&vid, img_old);
+	video_GrabImageGrey(&vid, img_old);
     for (;;) {
-		video_GrabImage(&vid, img_new);
+		video_GrabImageGrey(&vid, img_new);
 
+/*
+		char fn[100];
+		snprintf(fn,100,"pgm_%d.pgm",img_new->seq);
+		write_pgm(img_new,fn);
+*/
 		//process
 		video_blocksum(img_old, img_new, &dx, &dy);
 		x+=dx;
@@ -114,7 +59,7 @@ int main(int argc,char ** argv)
 		
 		if(dx!=0 || dy!=0) {
 			//swap buffers
-			img_struct* tmp = img_new;
+			struct img_struct* tmp = img_new;
 			img_new=img_old;
 			img_old=tmp;
 		}

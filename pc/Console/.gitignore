@@ -1,0 +1,10 @@
+Console
+CMakeCache.txt
+CMakeFiles/
+*~
+cmake_install.cmake
+Makefile
+log*.txt
+*.csv
+*.ods
+.~*
